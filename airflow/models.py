@@ -356,6 +356,10 @@ class DagBag(BaseDagBag, LoggingMixin):
             .all()
         )
 
+        # check here, in this case
+        # 1. restart machine, task instance do not have heartbeat. timeout and set failed state, retry
+        # set another state, example: None, rescheduler this task for this dag_run
+
         for ti in tis:
             if ti and ti.dag_id in self.dags:
                 dag = self.dags[ti.dag_id]
@@ -1403,6 +1407,9 @@ class TaskInstance(Base, LoggingMixin):
             session.commit()
             return False
 
+        # check dag instance state, for this case:
+        # 1. cancel dag instance
+
         # print status message
         self.log.info(hr + msg + hr)
         self._try_number += 1
@@ -1511,7 +1518,9 @@ class TaskInstance(Base, LoggingMixin):
                         task_copy.post_execute(context=context)
                     else:
                         raise
-
+                with open("/tmp/test.log", "a") as f:
+                    f.write("test log")
+                    f.write(context)
                 Stats.incr('operator_successes_{}'.format(
                     self.task.__class__.__name__), 1, 1)
                 Stats.incr('ti_successes')
@@ -3069,6 +3078,7 @@ class DAG(BaseDag, LoggingMixin):
         qry = session.query(DR).filter(
             DR.dag_id == self.dag_id,
         )
+        # 此处查询最后一次调度, external_trigger 参数关键字
         if not include_externally_triggered:
             qry = qry.filter(DR.external_trigger.__eq__(False))
 

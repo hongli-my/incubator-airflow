@@ -765,6 +765,10 @@ class SchedulerJob(BaseJob):
                 external_trigger=False,
                 session=session
             )
+
+            # if limit the num of dag instance between start_date and end_date,
+            # I think add check condition here
+
             # return if already reached maximum active runs and no timeout setting
             if len(active_runs) >= dag.max_active_runs and not dag.dagrun_timeout:
                 return
@@ -942,6 +946,8 @@ class SchedulerJob(BaseJob):
                         session=session):
                     self.log.debug('Queuing task: %s', ti)
                     queue.append(ti.key)
+                    # 此处 为什么没有break, 理论上之后有一个task加入queue:
+                    # 1. 分叉的情况 ?
 
         session.close()
 
@@ -1582,11 +1588,16 @@ class SchedulerJob(BaseJob):
         :type processor_manager: DagFileProcessorManager
         :return: None
         """
+        # 启动200个进程: 此处有两个队列
         self.executor.start()
 
         session = settings.Session()
         self.log.info("Resetting orphaned tasks for active dag runs")
+        # 将状态为: scheduled,queued 的task 置为None, 便于下次调度
+        # 此设计考虑scheduler 重启?
         self.reset_state_for_orphaned_tasks(session=session)
+
+        # it's not good method to check runing state task, add etcd watch
         session.close()
 
         execute_start_time = datetime.utcnow()
@@ -1789,6 +1800,7 @@ class SchedulerJob(BaseJob):
         # returns true?)
         ti_keys_to_schedule = []
 
+        # ti_keys_to_schedule is task queue need to be executed
         self._process_dags(dagbag, dags, ti_keys_to_schedule)
 
         for ti_key in ti_keys_to_schedule:
@@ -2057,7 +2069,7 @@ class BackfillJob(BaseJob):
             execution_date=run_date,
             start_date=datetime.utcnow(),
             state=State.RUNNING,
-            external_trigger=False,
+            external_trigger=True,
             session=session
         )
 
@@ -2400,11 +2412,11 @@ class BackfillJob(BaseJob):
         start_date = self.bf_start_date
 
         # Get intervals between the start/end dates, which will turn into dag runs
-        run_dates = self.dag.get_run_dates(start_date=start_date,
-                                           end_date=self.bf_end_date)
-        if len(run_dates) == 0:
-            self.log.info("No run dates were found for the given dates and dag interval.")
-            return
+        # run_dates = self.dag.get_run_dates(start_date=start_date,
+        #                                    end_date=self.bf_end_date)
+        # if len(run_dates) == 0:
+        #     self.log.info("No run dates were found for the given dates and dag interval.")
+        #     return
 
         # picklin'
         pickle_id = None
@@ -2423,8 +2435,9 @@ class BackfillJob(BaseJob):
         try:
             remaining_dates = ti_status.total_runs
             while remaining_dates > 0:
-                dates_to_process = [run_date for run_date in run_dates
-                                    if run_date not in ti_status.executed_dag_run_dates]
+                # dates_to_process = [run_date for run_date in run_dates
+                #                     if run_date not in ti_status.executed_dag_run_dates]
+                dates_to_process = [datetime.utcnow()]
 
                 self._execute_for_run_dates(run_dates=dates_to_process,
                                             ti_status=ti_status,

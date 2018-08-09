@@ -159,6 +159,9 @@ def backfill(args, dag=None):
     args.start_date = args.start_date or args.end_date
 
     if args.task_regex:
+        # add args: include_downstream=True, include_upstream=False
+        # 能够满足需求: 从指定节点(含当前节点)之后开始执行
+        # 需要修改时间，使其满足在当前时刻执行，而非等到调度期
         dag = dag.sub_dag(
             task_regex=args.task_regex,
             include_upstream=not args.ignore_dependencies)
