@@ -529,8 +529,10 @@ class DagFileProcessorManager(LoggingMixin):
         while (self._parallelism - len(self._processors) > 0 and
                        len(self._file_path_queue) > 0):
             file_path = self._file_path_queue.pop(0)
+            # _processor_factory 即为DagFileProcessor
             processor = self._processor_factory(file_path)
 
+            # 调用start  方法，启动进程
             processor.start()
             self.log.info(
                 "Started a process (PID: %s) to generate tasks for %s",

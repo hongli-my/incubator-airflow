@@ -196,6 +196,12 @@ def trigger_dag(args):
     """
     log = LoggingMixin().log
     try:
+        # 人为触发一个dag instance,
+        # 1. 定义run_id, 如果存在则抛异常.
+        # 2. 创建一个dag_run,
+        #    a. 在dag_run 表中添加一条记录，state=running, external_trigger=True(非调度)
+        #    b. 设置DagStat model, 统计dag 失败/成功/运行状态数量
+        #    c. 设置verify_integrity, 关联task_instance, 即在数据库中创建task记录，state设为None
         message = api_client.trigger_dag(dag_id=args.dag_id,
                                          run_id=args.run_id,
                                          conf=args.conf,
@@ -378,6 +384,8 @@ def run(args, dag=None):
 
     with redirect_stdout(log, logging.INFO), redirect_stderr(log, logging.WARN):
         if args.local:
+            # 运行dag 中的某个task,直接使用LocalTaskJob, 运行task, 并检查依赖.
+            # 会生成两个进程
             run_job = jobs.LocalTaskJob(
                 task_instance=ti,
                 mark_success=args.mark_success,
@@ -798,6 +806,7 @@ def webserver(args):
 
 def scheduler(args):
     print(settings.HEADER)
+    # 实例化SchedulerJob, 并调用run方法
     job = jobs.SchedulerJob(
         dag_id=args.dag_id,
         subdir=process_subdir(args.subdir),
@@ -806,6 +815,7 @@ def scheduler(args):
         do_pickle=args.do_pickle)
 
     if args.daemon:
+        # 后台进程启动, 使用daemon 库
         pid, stdout, stderr, log_file = setup_locations("scheduler", args.pid, args.stdout, args.stderr, args.log_file)
         handle = setup_logging(log_file)
         stdout = open(stdout, 'w+')
@@ -1121,6 +1131,7 @@ Arg.__new__.__defaults__ = (None, None, None, None, None, None, None)
 
 
 class CLIFactory(object):
+    # 定义参数
     args = {
         # Shared
         'dag_id': Arg(("dag_id",), "The id of the dag"),
@@ -1607,12 +1618,14 @@ class CLIFactory(object):
                      'conn_id', 'conn_uri', 'conn_extra') + tuple(alternative_conn_specs),
         },
     )
+    # 生成命令行module
     subparsers_dict = {sp['func'].__name__: sp for sp in subparsers}
     dag_subparsers = (
         'list_tasks', 'backfill', 'test', 'run', 'pause', 'unpause')
 
     @classmethod
     def get_parser(cls, dag_parser=False):
+        # 使用argparse命令行解析模块
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(
             help='sub-command help', dest='subcommand')

@@ -52,6 +52,7 @@ class AirflowPlugin(object):
 plugins_folder = configuration.get('core', 'plugins_folder')
 if not plugins_folder:
     plugins_folder = configuration.get('core', 'airflow_home') + '/plugins'
+# 把path中包含的"~"和"~user"转换成用户目录
 plugins_folder = os.path.expanduser(plugins_folder)
 
 if plugins_folder not in sys.path:

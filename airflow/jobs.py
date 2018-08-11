@@ -168,6 +168,7 @@ class BaseJob(Base, LoggingMixin):
                 0,
                 self.heartrate - (datetime.utcnow() - job.latest_heartbeat).total_seconds())
 
+        # 更新心跳(latest_heartbeat字段), self.heartrate 默认5s
         # Don't keep session open while sleeping as it leaves a connection open
         session.close()
         sleep(sleep_for)
@@ -194,6 +195,8 @@ class BaseJob(Base, LoggingMixin):
         make_transient(self)
         self.id = id_
 
+        # 该方法为父类方法，子类不需要重写
+        # 只有作用: 在job 表中添加记录，然后执行_execute 方法，(子类实现)
         # Run
         self._execute()
 
@@ -228,6 +231,8 @@ class BaseJob(Base, LoggingMixin):
         # also consider running as the state might not have changed in the db yet
         running_tis = self.executor.running
 
+        # 过滤条件: dag_run 状态是running, 周期任务(external_trigger=False), 不是backfill 的任务
+        # 将上一步的结果去掉 executor 中存在的，然后将task 的state设为None, 更新到db表中
         resettable_states = [State.SCHEDULED, State.QUEUED]
         TI = models.TaskInstance
         DR = models.DagRun
@@ -758,6 +763,7 @@ class SchedulerJob(BaseJob):
         for a DAG based on scheduling interval
         Returns DagRun if one is scheduled. Otherwise returns None.
         """
+        # 判断dag 是否是周期性任务
         if dag.schedule_interval:
             active_runs = DagRun.find(
                 dag_id=dag.dag_id,
@@ -769,10 +775,13 @@ class SchedulerJob(BaseJob):
             # if limit the num of dag instance between start_date and end_date,
             # I think add check condition here
 
+            # 判断是否超过dag 实例最大个数
             # return if already reached maximum active runs and no timeout setting
             if len(active_runs) >= dag.max_active_runs and not dag.dagrun_timeout:
                 return
             timedout_runs = 0
+            # 检查dag runing 状态的实例是否超时，是则设置为失败状态
+            # 并从runing 总数中减去超时的数量
             for dr in active_runs:
                 if (
                         dr.start_date and dag.dagrun_timeout and
@@ -784,6 +793,8 @@ class SchedulerJob(BaseJob):
             if len(active_runs) - timedout_runs >= dag.max_active_runs:
                 return
 
+            # 查找最后一次调度的实例, 不排除backfill 任务
+            # 即backfill 运行的实例会作为一次调度任务，计算为scheduler 的一次调度任务
             # this query should be replaced by find dagrun
             qry = (
                 session.query(func.max(DagRun.execution_date))
@@ -796,17 +807,24 @@ class SchedulerJob(BaseJob):
             )
             last_scheduled_run = qry.scalar()
 
+            # 确认对应@once 已经调度过一次
             # don't schedule @once again
             if dag.schedule_interval == '@once' and last_scheduled_run:
                 return None
 
+            # 判断是否补充之前未执行的调度, 是则更新dag.start_date
+            # 出现该情况的可能:
+            # 1. scheduler 停掉
+            # 2. 未正常调度
             # don't do scheduler catchup for dag's that don't have dag.catchup = True
             if not dag.catchup:
                 # The logic is that we move start_date up until
                 # one period before, so that datetime.utcnow() is AFTER
                 # the period end, and the job can be created...
                 now = datetime.utcnow()
+                # 下一次的调度时间
                 next_start = dag.following_schedule(now)
+                # 上一次的调度时间
                 last_start = dag.previous_schedule(now)
                 if next_start <= now:
                     new_start = last_start
@@ -916,6 +934,7 @@ class SchedulerJob(BaseJob):
             # todo: run.dag is transient but needs to be set
             run.dag = dag
             # todo: preferably the integrity check happens at dag collection time
+            # 创建task instance 更新db, state=None
             run.verify_integrity(session=session)
             run.update_state(session=session)
             if run.state == State.RUNNING:
@@ -1334,6 +1353,8 @@ class SchedulerJob(BaseJob):
         :type states: Tuple[State]
         :return: None
         """
+        # 找到可以执行的task, 排除backfill 任务的task
+        # 此处考虑poll, 并发，优先级, 待分析
         executable_tis = self._find_executable_task_instances(simple_dag_bag, states,
                                                               session=session)
         if self.max_tis_per_query == 0:
@@ -1531,6 +1552,7 @@ class SchedulerJob(BaseJob):
 
         # Build up a list of Python files that could contain DAGs
         self.log.info("Searching for files in %s", self.subdir)
+        # 查找python 文件, 支持压缩文件
         known_file_paths = list_py_file_paths(self.subdir)
         self.log.info("There are %s files in %s", len(known_file_paths), self.subdir)
 
@@ -1613,6 +1635,7 @@ class SchedulerJob(BaseJob):
         known_file_paths = processor_manager.file_paths
 
         # For the execute duration, parse and schedule DAGs
+        # 此处进入endless loop
         while (datetime.utcnow() - execute_start_time).total_seconds() < \
                 self.run_duration or self.run_duration < 0:
             self.log.debug("Starting Loop...")
@@ -1623,6 +1646,7 @@ class SchedulerJob(BaseJob):
             elapsed_time_since_refresh = (datetime.utcnow() -
                                           last_dag_dir_refresh_time).total_seconds()
 
+            # 更新dag_folder 目录下新的python文件, 周期性的触发, 配置文件设置为0.
             if elapsed_time_since_refresh > self.dag_dir_list_interval:
                 # Build up a list of Python files that could contain DAGs
                 self.log.info("Searching for files in %s", self.subdir)
@@ -1631,6 +1655,7 @@ class SchedulerJob(BaseJob):
                 self.log.info("There are %s files in %s", len(known_file_paths), self.subdir)
                 processor_manager.set_file_paths(known_file_paths)
 
+                # 去除语法错误的python 文件
                 self.log.debug("Removing old import errors")
                 self.clear_nonexistent_import_errors(known_file_paths=known_file_paths)
 
@@ -1838,6 +1863,9 @@ class SchedulerJob(BaseJob):
         except Exception:
             self.log.exception("Error logging import errors!")
         try:
+            # 将task_instance 中dag_run是运行状态，且task_instance 记录心跳超时的回调handle_failure
+            # 此处作用: 重启机器，fork 的进程不会启动，task instance 状态一直不会更新，
+            # 一直停留在running 状态
             dagbag.kill_zombies()
         except Exception:
             self.log.exception("Error killing zombies!")

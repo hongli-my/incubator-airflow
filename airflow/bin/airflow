@@ -18,10 +18,13 @@ from airflow.bin.cli import CLIFactory
 
 if __name__ == '__main__':
 
+    # configuration 实现了获取配置文件参数
     if configuration.get("core", "security") == 'kerberos':
         os.environ['KRB5CCNAME'] = configuration.get('kerberos', 'ccache')
         os.environ['KRB5_KTNAME'] = configuration.get('kerberos', 'keytab')
 
+    # 启动参数解析
     parser = CLIFactory.get_parser()
     args = parser.parse_args()
+    # 运行函数
     args.func(args)
