@@ -40,6 +40,7 @@ class State(object):
     UP_FOR_RETRY = "up_for_retry"
     UPSTREAM_FAILED = "upstream_failed"
     SKIPPED = "skipped"
+    NOT_RUN = "not_run"
 
     task_states = (
         SUCCESS,
@@ -48,6 +49,7 @@ class State(object):
         UPSTREAM_FAILED,
         UP_FOR_RETRY,
         QUEUED,
+        NOT_RUN,
     )
 
     dag_states = (
@@ -96,6 +98,7 @@ class State(object):
             cls.SHUTDOWN,
             cls.FAILED,
             cls.SKIPPED,
+            cls.NOT_RUN,
         ]
 
     @classmethod

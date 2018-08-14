@@ -826,9 +826,12 @@ class SchedulerJob(BaseJob):
                 next_start = dag.following_schedule(now)
                 # 上一次的调度时间
                 last_start = dag.previous_schedule(now)
+                # 这种情况应该不会出现, 对于周期任务
                 if next_start <= now:
                     new_start = last_start
                 else:
+                    # 为什么再次获取previous_schedule,
+                    # 因为airflow 中，调度时间和执行时间差一个周期
                     new_start = dag.previous_schedule(last_start)
 
                 if dag.start_date:

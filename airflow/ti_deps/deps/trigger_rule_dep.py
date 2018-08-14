@@ -69,6 +69,21 @@ class TriggerRuleDep(BaseTIDep):
             )
         )
 
+        not_run = (
+            session
+            .query(
+                func.coalesce(func.sum(
+                    case([(TI.state == State.NOT_RUN, 1)], else_=0)), 0),
+            )
+            .filter(
+                TI.dag_id == ti.dag_id,
+                TI.task_id.in_(ti.task.upstream_task_ids),
+                TI.execution_date == ti.execution_date,
+                TI.state == State.NOT_RUN,
+            )
+        )
+        self.not_run = not_run.first()[0]
+
         successes, skipped, failed, upstream_failed, done = qry.first()
         for dep_status in self._evaluate_trigger_rule(
                 ti=ti,
@@ -125,7 +140,8 @@ class TriggerRuleDep(BaseTIDep):
         upstream_done = done >= upstream
         upstream_tasks_state = {
             "total": upstream, "successes": successes, "skipped": skipped,
-            "failed": failed, "upstream_failed": upstream_failed, "done": done
+            "failed": failed, "upstream_failed": upstream_failed, "done": done,
+            "not_run": self.not_run
         }
         # TODO(aoen): Ideally each individual trigger rules would be it's own class, but
         # this isn't very feasible at the moment since the database queries need to be
@@ -162,7 +178,10 @@ class TriggerRuleDep(BaseTIDep):
                     "upstream_tasks_state={1}, upstream_task_ids={2}"
                     .format(tr, upstream_tasks_state, task.upstream_task_ids))
         elif tr == TR.ALL_SUCCESS:
-            num_failures = upstream - successes
+            with open("/tmp/test_trigger.log", "a") as f:
+                f.write("==== test=== log\n")
+                f.write(str(upstream) + " " + str(successes) + " " + str(self.not_run) + "\n")
+            num_failures = upstream - successes - self.not_run
             if num_failures > 0:
                 yield self._failing_status(
                     reason="Task's trigger rule '{0}' requires all upstream "

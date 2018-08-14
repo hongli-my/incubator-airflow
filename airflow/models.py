@@ -4633,6 +4633,8 @@ class DagRun(Base, LoggingMixin):
         # future: remove the check on adhoc tasks (=active_tasks)
         if len(tis) == len(dag.active_tasks):
             root_ids = [t.task_id for t in dag.roots]
+            # root_ids 为叶子节点，也就是判断叶子节点的状态
+            # 因为每一步都是严格进行，能运行到叶子节点，状态是一致的
             roots = [t for t in tis if t.task_id in root_ids]
 
             # if all roots finished and at least on failed, the run failed
@@ -4642,7 +4644,7 @@ class DagRun(Base, LoggingMixin):
                 self.state = State.FAILED
 
             # if all roots succeeded and no unfinished tasks, the run succeeded
-            elif not unfinished_tasks and all(r.state in (State.SUCCESS, State.SKIPPED)
+            elif not unfinished_tasks and all(r.state in (State.SUCCESS, State.SKIPPED, State.NOT_RUN)
                                               for r in roots):
                 self.log.info('Marking run %s successful', self)
                 self.state = State.SUCCESS
