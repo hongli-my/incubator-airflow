@@ -85,6 +85,10 @@ class TriggerRuleDep(BaseTIDep):
         self.not_run = not_run.first()[0]
 
         successes, skipped, failed, upstream_failed, done = qry.first()
+        with open("/tmp/test_trigger.log", "a") as f:
+            f.write("======debug info=======\n")
+            f.write(str(ti.task.upstream_task_ids) + "\n")
+            f.write(str(done))
         for dep_status in self._evaluate_trigger_rule(
                 ti=ti,
                 successes=successes,
