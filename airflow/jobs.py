@@ -2559,6 +2559,13 @@ class LocalTaskJob(BaseJob):
             heartbeat_time_limit = conf.getint('scheduler',
                                                'scheduler_zombie_task_threshold')
             while True:
+                # 代替shell 命令, 减少cpu 使用率
+                # self.task_instance._run_raw_task_async(
+                #     mark_success=False,
+                #     job_id=str(self.id),
+                #     pool=self.pool,
+                # )
+
                 # Monitor the task to see if it's done
                 return_code = self.task_runner.return_code()
                 if return_code is not None:

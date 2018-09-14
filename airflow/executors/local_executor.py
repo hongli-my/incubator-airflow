@@ -45,6 +45,22 @@ class LocalWorker(multiprocessing.Process, LoggingMixin):
             try:
                 # check_call command 失败 subprocess 抛出异常
                 subprocess.check_call(command, shell=True)
+                # 代替subprocess 命令, 减少cpu使用率
+                # 使用etcd, 后台daemon 形式，会影响使用. grpc 和python 使用问题
+                # from airflow import jobs
+                # from airflow.models import DagBag
+                # from airflow.models import  TaskInstance
+                # tmp = command.split(" ")
+                # dag_id = tmp[2]
+                # task_id = tmp[3]
+                # execute_time = datetime.strptime(tmp[4], "%Y-%m-%dT%H:%M:%S.%f")
+                # file_path = tmp[-1]
+                # dagbag = DagBag(file_path)
+                # dag = dagbag.dags[dag_id]
+                # task = dag.get_task(task_id=task_id)
+                # ti = TaskInstance(task, execute_time)
+                # ti.refresh_from_db()
+                # jobs.LocalTaskJob(task_instance=ti).run()
                 state = State.SUCCESS
             except subprocess.CalledProcessError as e:
                 state = State.FAILED
